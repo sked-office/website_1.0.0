@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKATE</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #11141a;
+            color: #ffffff;
+        }
+
+        /* Desktop Canvas */
+        .desktop-canvas {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 30%, #1e2430 0%, #0d0f14 100%);
+            overflow: hidden;
+        }
+
+        /* Vorschau-Fläche beim Randzug (Snap Preview) */
+        .snap-preview {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(37, 99, 235, 0.25);
+            border: 2px dashed rgba(59, 130, 246, 0.6);
+            border-radius: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            z-index: 9999;
+        }
+
+        .snap-preview.visible {
+            opacity: 1;
+        }
+
+        /* Fenster Styles */
+        .window {
+            position: absolute;
+            background: #1a1d24;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 250px;
+            min-height: 150px;
+            transition: top 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                        left 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                        width 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                        height 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        .window.dragging {
+            transition: none !important; /* Deaktiviert Animationen während des ziehens */
+        }
+
+        .window-header {
+            height: 38px;
+            background: #232730;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: move;
+        }
+
+        .window-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #a0a5b5;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .control-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-close { background: #ff5f56; }
+        .btn-maximize { background: #27c93f; }
+
+        .window-body {
+            padding: 20px;
+            flex-grow: 1;
+            overflow-y: auto;
+            color: #d1d5db;
+            user-select: text;
+        }
+
+        .window-body h2 {
+            font-size: 1.4rem;
+            color: #ffffff;
+            margin-bottom: 10px;
+        }
+
+        .window-body p {
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+
+        .window-body img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        #win-1 .window-body {
+            position: relative;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #win-1 .window-body img {
+            object-fit: cover;
+        }
+
+        .skate-wordmark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            color: #ff9dcc;
+            font-family: "Cooper Black", "Arial Rounded MT Bold", "Arial Black", sans-serif;
+            font-size: clamp(3.2rem, 15vw, 6.5rem);
+            font-weight: 900;
+            font-style: normal;
+            -webkit-text-stroke: 5px #11141a;
+            paint-order: stroke fill;
+            letter-spacing: -0.1em;
+            line-height: 1;
+            white-space: nowrap;
+            text-shadow: 4px 4px 0 #f15b9b, 9px 10px 0 #11141a, 0 0 18px rgba(0, 0, 0, 0.8);
+            transform: translate(-50%, -50%) rotate(-3deg) scale(1.05);
+            filter: blur(5px);
+            animation: sprayPaint 1100ms ease-out 350ms forwards;
+            z-index: 1;
+        }
+
+        .skate-letter {
+            display: inline-block;
+            background: linear-gradient(180deg, #ffd1e7 0%, #ff9dcc 42%, #ed609d 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            -webkit-text-stroke: 3px #11141a;
+            paint-order: stroke fill;
+            text-shadow: 1px 1px 0 #f477ae,
+                         3px 3px 0 #e34e8c,
+                         5px 5px 0 #bd326e,
+                         7px 7px 0 #11141a,
+                         10px 11px 0 rgba(0, 0, 0, 0.75);
+            opacity: 0;
+            transform: translateY(-90px) rotate(var(--start-angle)) scale(1.6);
+            animation: letterSpray 900ms cubic-bezier(0.2, 1.4, 0.4, 1) var(--delay) forwards;
+        }
+
+        .skate-letter:nth-child(1) { --delay: 450ms; --start-angle: -24deg; --end-angle: -8deg; }
+        .skate-letter:nth-child(2) { --delay: 520ms; --start-angle: 16deg; --end-angle: 5deg; }
+        .skate-letter:nth-child(3) { --delay: 590ms; --start-angle: -18deg; --end-angle: -4deg; }
+        .skate-letter:nth-child(4) { --delay: 660ms; --start-angle: 22deg; --end-angle: 8deg; }
+        .skate-letter:nth-child(5) { --delay: 730ms; --start-angle: -14deg; --end-angle: -6deg; }
+
+        @keyframes letterSpray {
+            0% {
+                opacity: 0;
+                transform: translateY(-90px) rotate(var(--start-angle)) scale(1.6);
+            }
+            65% {
+                opacity: 1;
+                transform: translateY(12px) rotate(var(--end-angle)) scale(0.88);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) rotate(var(--end-angle)) scale(1);
+            }
+        }
+
+        .skate-wordmark::before {
+            position: absolute;
+            content: "";
+            top: 50%;
+            left: 50%;
+            width: 170%;
+            height: 220%;
+            background-image: radial-gradient(circle, rgba(255, 223, 0, 0.95) 0 2px, transparent 3px),
+                              radial-gradient(circle, rgba(229, 57, 53, 0.8) 0 1px, transparent 2px);
+            background-position: 8% 40%, 70% 60%;
+            background-size: 18px 15px, 11px 13px;
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.35);
+            animation: sprayBurst 900ms ease-out 350ms forwards;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        @keyframes sprayPaint {
+            0% {
+                opacity: 0;
+                filter: blur(5px);
+            }
+            45% {
+                opacity: 0.45;
+                filter: blur(3px);
+            }
+            70% {
+                opacity: 0.8;
+                filter: blur(1px);
+            }
+            100% {
+                opacity: 1;
+                filter: blur(0);
+            }
+        }
+
+        @keyframes sprayBurst {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.35);
+            }
+            35% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(1.15);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="desktop-canvas" id="desktop">
+        <div class="snap-preview" id="snap-preview"></div>
+
+        <div class="window" id="win-1" style="width: 420px; height: 260px; left: 40px; top: 40px; z-index: 101;">
+            <div class="window-header">
+                <span class="window-title">Startseite</span>
+                <div class="window-controls">
+                    <button class="control-btn btn-maximize" onclick="openStartseite()"></button>
+                    <button class="control-btn btn-close" onclick="closeWindow('win-1')"></button>
+                </div>
+            </div>
+            <div class="window-body">
+                <img src="https://i.etsystatic.com/13015978/r/il/6324c4/6453468991/il_570xN.6453468991_4a4a.jpg" alt="Gruppenfoto" width="500" height="300" loading="lazy">
+                <span class="skate-wordmark" aria-label="Skate"><span class="skate-letter">S</span><span class="skate-letter">K</span><span class="skate-letter">A</span><span class="skate-letter">T</span><span class="skate-letter">E</span></span>
+            </div>
+        </div>
+
+        <div class="window" id="win-2" style="width: 420px; height: 260px; left: 500px; top: 80px; z-index: 102;">
+            <div class="window-header">
+                <span class="window-title">Über mich</span>
+                <div class="window-controls">
+                    <button class="control-btn btn-maximize" onclick="toggleMaximize('win-2')"></button>
+                    <button class="control-btn btn-close" onclick="closeWindow('win-2')"></button>
+                </div>
+            </div>
+            <div class="window-body">
+                <h2>Meine Informationen</h2>
+                <p>Hier kannst du deinen eigenen Text eintragen.</p>
+            </div>
+        </div>
+
+        <div class="window" id="win-3" style="width: 420px; height: 260px; left: 100px; top: 360px; z-index: 103;">
+            <div class="window-header">
+                <span class="window-title">Projekte</span>
+                <div class="window-controls">
+                    <button class="control-btn btn-maximize" onclick="toggleMaximize('win-3')"></button>
+                    <button class="control-btn btn-close" onclick="closeWindow('win-3')"></button>
+                </div>
+            </div>
+            <div class="window-body">
+                <h2>Meine Projekte</h2>
+                <p>Hier stehen die Informationen zu deinen Projekten.</p>
+            </div>
+        </div>
+
+        <div class="window" id="win-4" style="width: 420px; height: 260px; left: 560px; top: 400px; z-index: 104;">
+            <div class="window-header">
+                <span class="window-title">Kontakt</span>
+                <div class="window-controls">
+                    <button class="control-btn btn-maximize" onclick="toggleMaximize('win-4')"></button>
+                    <button class="control-btn btn-close" onclick="closeWindow('win-4')"></button>
+                </div>
+            </div>
+            <div class="window-body">
+                <h2>Kontaktmöglichkeiten</h2>
+                <p>Hier kannst du deine Kontaktdaten eintragen.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let highestZIndex = 100;
+        let windowCounter = 0;
+        const snapPreview = document.getElementById('snap-preview');
+
+        function closeWindow(id) {
+            const win = document.getElementById(id);
+            if (win) win.remove();
+        }
+
+        function openStartseite() {
+            window.location.href = 'Startseite.html';
+        }
+
+        function toggleMaximize(id) {
+            const win = document.getElementById(id);
+            if (!win) return;
+
+            if (win.dataset.isMaximized === 'true') {
+                restoreWindow(win);
+            } else {
+                maximizeWindow(win);
+            }
+            bringToFront(win);
+        }
+
+        function maximizeWindow(win) {
+            if (win.id === 'win-1') {
+                openStartseite();
+                return;
+            }
+
+            if (win.dataset.isMaximized !== 'true') {
+                // Vorherige Position und Größe sichern
+                win.dataset.lastLeft = win.style.left;
+                win.dataset.lastTop = win.style.top;
+                win.dataset.lastWidth = win.style.width;
+                win.dataset.lastHeight = win.style.height;
+            }
+
+            win.style.left = '0px';
+            win.style.top = '0px';
+            win.style.width = '100vw';
+            win.style.height = '100vh';
+            win.style.borderRadius = '0px';
+            win.dataset.isMaximized = 'true';
+        }
+
+        function restoreWindow(win) {
+            win.style.left = win.dataset.lastLeft || '50px';
+            win.style.top = win.dataset.lastTop || '50px';
+            win.style.width = win.dataset.lastWidth || '480px';
+            win.style.height = win.dataset.lastHeight || '320px';
+            win.style.borderRadius = '10px';
+            win.dataset.isMaximized = 'false';
+        }
+
+        function bringToFront(win) {
+            highestZIndex++;
+            win.style.zIndex = highestZIndex;
+        }
+
+        function initInteractivity(win, x, y, w, h) {
+            const header = win.querySelector('.window-header');
+
+            win.dataset.lastLeft = `${x}px`;
+            win.dataset.lastTop = `${y}px`;
+            win.dataset.lastWidth = `${w}px`;
+            win.dataset.lastHeight = `${h}px`;
+            win.dataset.isMaximized = 'false';
+
+            win.addEventListener('mousedown', () => bringToFront(win));
+
+            header.addEventListener('mousedown', (e) => {
+                if (e.target.classList.contains('control-btn')) return;
+
+                win.classList.add('dragging');
+
+                let isMax = win.dataset.isMaximized === 'true';
+
+                // Wenn im Vollbild gezogen wird: Sofort verkleinern und Maus ausrichten
+                if (isMax) {
+                    restoreWindow(win);
+                    const restoredWidth = parseInt(win.style.width);
+                    win.style.left = `${e.clientX - restoredWidth / 2}px`;
+                    win.style.top = `${e.clientY - 15}px`;
+                }
+
+                let shiftX = e.clientX - win.getBoundingClientRect().left;
+                let shiftY = e.clientY - win.getBoundingClientRect().top;
+
+                function moveAt(pageX, pageY) {
+                    let left = pageX - shiftX;
+                    let top = pageY - shiftY;
+
+                    win.style.left = left + 'px';
+                    win.style.top = top + 'px';
+
+                    // Vorschau anzeigen, wenn Maus ganz oben am Bildschirm ist (Snap to Maximize)
+                    if (pageY <= 10) {
+                        snapPreview.classList.add('visible');
+                    } else {
+                        snapPreview.classList.remove('visible');
+                    }
+                }
+
+                function onMouseMove(e) {
+                    moveAt(e.clientX, e.clientY);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+
+                document.addEventListener('mouseup', (e) => {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    win.classList.remove('dragging');
+                    snapPreview.classList.remove('visible');
+
+                    // Wenn am oberen Rand losgelassen: Vollbild aktivieren
+                    if (e.clientY <= 10) {
+                        maximizeWindow(win);
+                    }
+                }, { once: true });
+            });
+        }
+
+        window.onload = () => {
+            const desktop = document.getElementById('desktop');
+
+            document.querySelectorAll('.window').forEach((win) => {
+                const width = parseInt(win.style.width, 10);
+                const height = parseInt(win.style.height, 10);
+                const maxLeft = Math.max(0, desktop.clientWidth - width);
+                const maxTop = Math.max(0, desktop.clientHeight - height);
+                const left = Math.floor(Math.random() * (maxLeft + 1));
+                const top = Math.floor(Math.random() * (maxTop + 1));
+
+                win.style.left = `${left}px`;
+                win.style.top = `${top}px`;
+
+                highestZIndex = Math.max(highestZIndex, parseInt(win.style.zIndex, 10));
+                initInteractivity(win, left, top, width, height);
+            });
+        };
+    </script>
+</body>
+</html>
